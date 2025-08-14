@@ -21,6 +21,8 @@ exports.handler = async (event) => {
         return await getConversation(args.id, userId);
       case "createConversation":
         return await createConversation(args.title, userId);
+      case "listRecentConversations":
+        return await listRecentConversations(args.limit, userId);
       case "getMessages":
         return await getMessages(args.conversationId, userId);
       case "sendMessage":
@@ -264,4 +266,25 @@ async function updateMessageContent(
     isComplete: !!isComplete,
     timestamp,
   };
+}
+
+async function listRecentConversations(limit, userId) {
+  const maxLimit = limit && limit > 0 && limit <= 50 ? limit : 10;
+  const params = {
+    TableName: TABLE_NAME,
+    IndexName: "GSI2",
+    KeyConditionExpression: "GSI2PK = :pk",
+    ExpressionAttributeValues: {
+      ":pk": `USER#${userId}`,
+    },
+    Limit: maxLimit,
+  };
+  const result = await dynamodb.query(params).promise();
+  return (result.Items || []).map((item) => ({
+    id: item.id,
+    userId: item.userId,
+    title: item.title,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  }));
 }
