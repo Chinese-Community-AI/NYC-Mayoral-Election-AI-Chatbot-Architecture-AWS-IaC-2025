@@ -24,6 +24,11 @@ output "frontend_cdn_domain" {
   description = "Frontend CDN domain"
 }
 
+output "frontend_distribution_id" {
+  value       = module.frontend.distribution_id
+  description = "CloudFront distribution id"
+}
+
 output "api_url" {
   value       = module.api.api_url
   description = "Auth API URL"
