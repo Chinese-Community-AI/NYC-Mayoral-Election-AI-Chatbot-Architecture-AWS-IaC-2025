@@ -36,3 +36,16 @@ export const CREATE_CONVERSATION = gql`
     }
   }
 `;
+
+export const SEND_MESSAGE = gql`
+  mutation SendMessage($conversationId: ID!, $content: String!) {
+    sendMessage(conversationId: $conversationId, content: $content) {
+      id
+      conversationId
+      content
+      role
+      timestamp
+      isComplete
+    }
+  }
+`;
