@@ -7,6 +7,8 @@ import Login from "./components/Login";
 import authService from "./auth/authService";
 import { Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./auth/PrivateRoute";
+import "./index.css";
+import "./App.css";
 
 function App() {
   const isAuthed = authService.isLoggedIn();
@@ -19,19 +21,24 @@ function App() {
           path="/"
           element={
             <PrivateRoute>
-              <div style={{ display: "flex", gap: 16 }}>
-                <div style={{ width: 320 }}>
-                  <ConversationList
-                    selectedId={selectedConversationId}
-                    onSelect={setSelectedConversationId}
-                  />
+              <div className="app-shell">
+                <div className="app-header">
+                  NYC Mayoral Election AI Chatbot
                 </div>
-                <div style={{ flex: 1 }}>
-                  {selectedConversationId ? (
-                    <ChatInterface conversationId={selectedConversationId} />
-                  ) : (
-                    <div style={{ padding: 16 }}>Select a conversation</div>
-                  )}
+                <div className="app-content">
+                  <div className="sidebar">
+                    <ConversationList
+                      selectedId={selectedConversationId}
+                      onSelect={setSelectedConversationId}
+                    />
+                  </div>
+                  <div className="main">
+                    {selectedConversationId ? (
+                      <ChatInterface conversationId={selectedConversationId} />
+                    ) : (
+                      <div style={{ padding: 16 }}>Select a conversation</div>
+                    )}
+                  </div>
                 </div>
               </div>
             </PrivateRoute>
