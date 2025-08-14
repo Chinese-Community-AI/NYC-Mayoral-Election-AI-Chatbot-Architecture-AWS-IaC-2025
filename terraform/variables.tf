@@ -16,4 +16,10 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "bedrock_model_id" {
+  description = "Bedrock model ID for streaming handler"
+  type        = string
+  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+}
+
 
