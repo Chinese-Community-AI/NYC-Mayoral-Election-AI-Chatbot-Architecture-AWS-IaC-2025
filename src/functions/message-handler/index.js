@@ -25,6 +25,13 @@ exports.handler = async (event) => {
         return await getMessages(args.conversationId, userId);
       case "sendMessage":
         return await sendMessage(args.conversationId, args.content, userId);
+      case "updateMessageContent":
+        return await updateMessageContent(
+          args.messageId,
+          args.conversationId,
+          args.content,
+          args.isComplete
+        );
       default:
         return { ok: true };
     }
@@ -228,5 +235,33 @@ async function sendMessage(conversationId, content, userId) {
       timestamp: assistant.timestamp,
       isComplete: assistant.isComplete,
     },
+  };
+}
+
+async function updateMessageContent(
+  messageId,
+  conversationId,
+  content,
+  isComplete
+) {
+  const timestamp = new Date().toISOString();
+  await dynamodb
+    .update({
+      TableName: TABLE_NAME,
+      Key: { PK: `CONV#${conversationId}`, SK: `MSG#${messageId}` },
+      UpdateExpression: "SET content = :c, isComplete = :ic",
+      ExpressionAttributeValues: {
+        ":c": content,
+        ":ic": !!isComplete,
+      },
+    })
+    .promise();
+
+  return {
+    messageId,
+    conversationId,
+    content,
+    isComplete: !!isComplete,
+    timestamp,
   };
 }
