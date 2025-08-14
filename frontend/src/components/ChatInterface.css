@@ -1,2 +1,24 @@
+.chat-interface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
 
+.message-input-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #eee;
+}
+
+.message-input-form input {
+  flex: 1;
+}

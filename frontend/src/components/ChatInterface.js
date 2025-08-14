@@ -7,6 +7,7 @@ import {
   ON_NEW_MESSAGE,
 } from "../graphql/operations";
 import MessageList from "./MessageList";
+import "./ChatInterface.css";
 
 function ChatInterface({ conversationId }) {
   const [text, setText] = useState("");
@@ -46,7 +47,7 @@ function ChatInterface({ conversationId }) {
   return (
     <div className="chat-interface">
       {loading ? <div>Loading...</div> : <MessageList messages={messages} />}
-      <form onSubmit={onSend}>
+      <form className="message-input-form" onSubmit={onSend}>
         <input
           placeholder="Type a message"
           value={text}
