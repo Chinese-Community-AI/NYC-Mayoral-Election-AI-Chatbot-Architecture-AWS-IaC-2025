@@ -1,12 +1,10 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 import authService from "./authService";
 
-function PrivateRoute({ children }) {
-  if (!authService.isLoggedIn()) {
-    return <Navigate to="/login" replace />;
-  }
-  return <>{children}</>;
+function PrivateRoute() {
+  const isAuthenticated = authService.isLoggedIn();
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 export default PrivateRoute;
