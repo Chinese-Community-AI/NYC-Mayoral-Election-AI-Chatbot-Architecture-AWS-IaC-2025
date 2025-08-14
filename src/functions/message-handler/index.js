@@ -21,6 +21,10 @@ exports.handler = async (event) => {
         return await getConversation(args.id, userId);
       case "createConversation":
         return await createConversation(args.title, userId);
+      case "getMessages":
+        return await getMessages(args.conversationId, userId);
+      case "sendMessage":
+        return await sendMessage(args.conversationId, args.content, userId);
       default:
         return { ok: true };
     }
@@ -109,5 +113,120 @@ async function createConversation(title, userId) {
     title: userConversationItem.title,
     createdAt: timestamp,
     updatedAt: timestamp,
+  };
+}
+
+async function getMessages(conversationId, userId) {
+  // Verify ownership
+  const check = await dynamodb
+    .get({
+      TableName: TABLE_NAME,
+      Key: { PK: `USER#${userId}`, SK: `CONV#${conversationId}` },
+    })
+    .promise();
+  if (!check.Item) return [];
+
+  const params = {
+    TableName: TABLE_NAME,
+    KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+    ExpressionAttributeValues: {
+      ":pk": `CONV#${conversationId}`,
+      ":sk": "MSG#",
+    },
+  };
+  const result = await dynamodb.query(params).promise();
+  return (result.Items || []).map((item) => ({
+    id: item.id,
+    conversationId: item.conversationId,
+    content: item.content,
+    role: item.role,
+    timestamp: item.timestamp,
+    isComplete: item.isComplete,
+  }));
+}
+
+async function sendMessage(conversationId, content, userId) {
+  // Verify ownership
+  const check = await dynamodb
+    .get({
+      TableName: TABLE_NAME,
+      Key: { PK: `USER#${userId}`, SK: `CONV#${conversationId}` },
+    })
+    .promise();
+  if (!check.Item) {
+    throw new Error(`Conversation ${conversationId} not found`);
+  }
+
+  const timestamp = new Date().toISOString();
+  const userMessageId = uuidv4();
+
+  const userMessage = {
+    PK: `CONV#${conversationId}`,
+    SK: `MSG#${userMessageId}`,
+    GSI1PK: `MSG#${userMessageId}`,
+    GSI1SK: timestamp,
+    id: userMessageId,
+    conversationId,
+    content,
+    role: "user",
+    timestamp,
+    isComplete: true,
+  };
+
+  await dynamodb.put({ TableName: TABLE_NAME, Item: userMessage }).promise();
+
+  // Update conversation metadata and recent sort key
+  const reversedTimestamp = `${9999999999999 - Date.now()}`;
+  await dynamodb
+    .update({
+      TableName: TABLE_NAME,
+      Key: { PK: `CONV#${conversationId}`, SK: "METADATA" },
+      UpdateExpression: "SET updatedAt = :u",
+      ExpressionAttributeValues: { ":u": timestamp },
+    })
+    .promise();
+
+  await dynamodb
+    .update({
+      TableName: TABLE_NAME,
+      Key: { PK: `USER#${userId}`, SK: `CONV#${conversationId}` },
+      UpdateExpression: "SET updatedAt = :u, GSI2SK = :g",
+      ExpressionAttributeValues: { ":u": timestamp, ":g": reversedTimestamp },
+    })
+    .promise();
+
+  // Create minimal assistant placeholder
+  const assistantMessageId = uuidv4();
+  const assistant = {
+    PK: `CONV#${conversationId}`,
+    SK: `MSG#${assistantMessageId}`,
+    GSI1PK: `MSG#${assistantMessageId}`,
+    GSI1SK: new Date().toISOString(),
+    id: assistantMessageId,
+    conversationId,
+    content: "...",
+    role: "assistant",
+    timestamp: new Date().toISOString(),
+    isComplete: false,
+  };
+  await dynamodb.put({ TableName: TABLE_NAME, Item: assistant }).promise();
+
+  return {
+    userMessage: {
+      id: userMessage.id,
+      conversationId: userMessage.conversationId,
+      content: userMessage.content,
+      role: userMessage.role,
+      timestamp: userMessage.timestamp,
+      isComplete: userMessage.isComplete,
+    },
+    assistantMessage: {
+      id: assistant.id,
+      conversationId: assistant.conversationId,
+      content: assistant.content,
+      role: assistant.role,
+      timestamp: assistant.timestamp,
+      isComplete: assistant.isComplete,
+    },
   };
 }
