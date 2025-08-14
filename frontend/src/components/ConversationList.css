@@ -1,2 +1,16 @@
+.new-conversation-form {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+}
 
+.conversation-item {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
 
+.conversation-item.selected {
+  background: #eef;
+}

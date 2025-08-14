@@ -5,6 +5,7 @@ import {
   LIST_RECENT_CONVERSATIONS,
   CREATE_CONVERSATION,
 } from "../graphql/operations";
+import "./ConversationList.css";
 
 function ConversationList({ onSelect, selectedId }) {
   const [showRecent, setShowRecent] = useState(true);
@@ -25,7 +26,7 @@ function ConversationList({ onSelect, selectedId }) {
   if (error) return <div className="conversation-list">Error</div>;
   return (
     <div className="conversation-list">
-      <form onSubmit={onCreate}>
+      <form onSubmit={onCreate} className="new-conversation-form">
         <input
           placeholder="New conversation title"
           value={title}
@@ -47,13 +48,9 @@ function ConversationList({ onSelect, selectedId }) {
         <div
           key={c.id}
           onClick={() => onSelect && onSelect(c.id)}
-          style={{
-            cursor: "pointer",
-            padding: 8,
-            background: selectedId === c.id ? "#eef" : "transparent",
-            borderRadius: 4,
-            marginBottom: 4,
-          }}
+          className={
+            "conversation-item" + (selectedId === c.id ? " selected" : "")
+          }
         >
           {c.title || c.id}
         </div>
