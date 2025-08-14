@@ -1,2 +1,26 @@
 reference/
 .DS_Store
+node_modules/
+dist/
+build/
+.cache/
+.parcel-cache/
+.next/
+coverage/
+.env*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend build outputs
+frontend/build/
+
+# Terraform state and local files
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfvars
+
+# OS files
+Thumbs.db
