@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { ApolloProvider } from "@apollo/client";
 import client from "./graphql/client";
 import ConversationList from "./components/ConversationList";
@@ -8,15 +8,23 @@ import authService from "./auth/authService";
 
 function App() {
   const isAuthed = authService.isLoggedIn();
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
   return (
     <ApolloProvider client={client}>
       {isAuthed ? (
         <div style={{ display: "flex", gap: 16 }}>
           <div style={{ width: 320 }}>
-            <ConversationList />
+            <ConversationList
+              selectedId={selectedConversationId}
+              onSelect={setSelectedConversationId}
+            />
           </div>
           <div style={{ flex: 1 }}>
-            <ChatInterface conversationId={"placeholder-conversation-id"} />
+            {selectedConversationId ? (
+              <ChatInterface conversationId={selectedConversationId} />
+            ) : (
+              <div style={{ padding: 16 }}>Select a conversation</div>
+            )}
           </div>
         </div>
       ) : (

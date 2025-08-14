@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client";
 import { LIST_CONVERSATIONS, CREATE_CONVERSATION } from "../graphql/operations";
 
-function ConversationList() {
+function ConversationList({ onSelect, selectedId }) {
   const { data, loading, error, refetch } = useQuery(LIST_CONVERSATIONS);
   const [createConversation] = useMutation(CREATE_CONVERSATION);
   const [title, setTitle] = useState("");
@@ -26,7 +26,19 @@ function ConversationList() {
         <button type="submit">Create</button>
       </form>
       {(data?.listConversations || []).map((c) => (
-        <div key={c.id}>{c.title || c.id}</div>
+        <div
+          key={c.id}
+          onClick={() => onSelect && onSelect(c.id)}
+          style={{
+            cursor: "pointer",
+            padding: 8,
+            background: selectedId === c.id ? "#eef" : "transparent",
+            borderRadius: 4,
+            marginBottom: 4,
+          }}
+        >
+          {c.title || c.id}
+        </div>
       ))}
     </div>
   );
