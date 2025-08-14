@@ -24,6 +24,8 @@ exports.handler = async (event) => {
         return await createConversation(args.title, userId);
       case "listRecentConversations":
         return await listRecentConversations(args.limit, userId);
+      case "getMessage":
+        return await getMessage(args.id, args.conversationId, userId);
       case "getMessages":
         return await getMessages(args.conversationId, userId);
       case "sendMessage":
@@ -78,6 +80,31 @@ async function getConversation(id, userId) {
     title: check.Item.title,
     createdAt: check.Item.createdAt,
     updatedAt: check.Item.updatedAt,
+  };
+}
+
+async function getMessage(id, conversationId, userId) {
+  const userConv = await dynamodb
+    .get({
+      TableName: TABLE_NAME,
+      Key: { PK: `USER#${userId}`, SK: `CONV#${conversationId}` },
+    })
+    .promise();
+  if (!userConv.Item) return null;
+  const res = await dynamodb
+    .get({
+      TableName: TABLE_NAME,
+      Key: { PK: `CONV#${conversationId}`, SK: `MSG#${id}` },
+    })
+    .promise();
+  if (!res.Item) return null;
+  return {
+    id: res.Item.id,
+    conversationId: res.Item.conversationId,
+    content: res.Item.content,
+    role: res.Item.role,
+    timestamp: res.Item.timestamp,
+    isComplete: res.Item.isComplete,
   };
 }
 
