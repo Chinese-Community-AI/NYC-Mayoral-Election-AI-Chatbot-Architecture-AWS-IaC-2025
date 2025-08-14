@@ -1,6 +1,11 @@
 import React, { useState } from "react";
-import { useQuery, useMutation } from "@apollo/client";
-import { GET_MESSAGES, SEND_MESSAGE } from "../graphql/operations";
+import { useQuery, useMutation, useSubscription } from "@apollo/client";
+import {
+  GET_MESSAGES,
+  SEND_MESSAGE,
+  ON_MESSAGE_UPDATE,
+  ON_NEW_MESSAGE,
+} from "../graphql/operations";
 
 function ChatInterface({ conversationId }) {
   const [text, setText] = useState("");
@@ -9,6 +14,22 @@ function ChatInterface({ conversationId }) {
     skip: !conversationId,
   });
   const [sendMessage] = useMutation(SEND_MESSAGE);
+
+  // Subscriptions (best-effort; non-blocking)
+  useSubscription(ON_NEW_MESSAGE, {
+    variables: { conversationId },
+    skip: !conversationId,
+    onData: () => {
+      refetch();
+    },
+  });
+  useSubscription(ON_MESSAGE_UPDATE, {
+    variables: { conversationId },
+    skip: !conversationId,
+    onData: () => {
+      refetch();
+    },
+  });
 
   const onSend = async (e) => {
     e.preventDefault();

@@ -61,3 +61,28 @@ export const LIST_RECENT_CONVERSATIONS = gql`
     }
   }
 `;
+
+export const ON_NEW_MESSAGE = gql`
+  subscription OnNewMessage($conversationId: ID!) {
+    onNewMessage(conversationId: $conversationId) {
+      id
+      conversationId
+      content
+      role
+      timestamp
+      isComplete
+    }
+  }
+`;
+
+export const ON_MESSAGE_UPDATE = gql`
+  subscription OnMessageUpdate($conversationId: ID!) {
+    onMessageUpdate(conversationId: $conversationId) {
+      messageId
+      conversationId
+      content
+      isComplete
+      timestamp
+    }
+  }
+`;
