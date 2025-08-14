@@ -4,7 +4,7 @@ import { GET_MESSAGES, SEND_MESSAGE } from "../graphql/operations";
 
 function ChatInterface({ conversationId }) {
   const [text, setText] = useState("");
-  const { data, loading } = useQuery(GET_MESSAGES, {
+  const { data, loading, refetch } = useQuery(GET_MESSAGES, {
     variables: { conversationId },
     skip: !conversationId,
   });
@@ -14,6 +14,8 @@ function ChatInterface({ conversationId }) {
     e.preventDefault();
     if (!text.trim()) return;
     await sendMessage({ variables: { conversationId, content: text } });
+    // Refresh messages to pick up placeholder and later updates
+    refetch();
     setText("");
   };
 
