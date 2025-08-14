@@ -24,3 +24,15 @@ export const GET_MESSAGES = gql`
     }
   }
 `;
+
+export const CREATE_CONVERSATION = gql`
+  mutation CreateConversation($title: String) {
+    createConversation(title: $title) {
+      id
+      userId
+      title
+      createdAt
+      updatedAt
+    }
+  }
+`;
