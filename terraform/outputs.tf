@@ -29,6 +29,11 @@ output "frontend_distribution_id" {
   description = "CloudFront distribution id"
 }
 
+output "frontend_bucket_name" {
+  value       = module.frontend.bucket_name
+  description = "S3 bucket for frontend hosting"
+}
+
 output "api_url" {
   value       = module.api.api_url
   description = "Auth API URL"
