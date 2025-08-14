@@ -22,4 +22,15 @@ variable "bedrock_model_id" {
   default     = "anthropic.claude-3-haiku-20240307-v1:0"
 }
 
+variable "jwt_secret" {
+  description = "JWT signing secret (set in terraform.tfvars)"
+  type        = string
+}
+
+variable "cors_allowed_origins" {
+  description = "List of allowed CORS origins for the Auth API"
+  type        = list(string)
+  default     = ["*"]
+}
+
 
