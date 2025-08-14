@@ -19,7 +19,12 @@ async function getJwtSecret() {
 function ok(bodyObj) {
   return {
     statusCode: 200,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+      "Access-Control-Allow-Methods": "OPTIONS,POST",
+    },
     body: JSON.stringify(bodyObj),
   };
 }
@@ -27,7 +32,12 @@ function ok(bodyObj) {
 function badRequest(message) {
   return {
     statusCode: 400,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+      "Access-Control-Allow-Methods": "OPTIONS,POST",
+    },
     body: JSON.stringify({ message }),
   };
 }
