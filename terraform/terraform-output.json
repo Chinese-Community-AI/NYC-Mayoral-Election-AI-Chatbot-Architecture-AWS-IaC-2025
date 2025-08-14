@@ -1,0 +1,42 @@
+{
+  "api_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "https://6hxf06v4dl.execute-api.us-east-1.amazonaws.com/dev"
+  },
+  "appsync_api_key": {
+    "sensitive": true,
+    "type": "string",
+    "value": "da2-mvzaxgtm7naghhifcm4etm375a"
+  },
+  "appsync_graphql_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "https://ojyjch7egngmrc264vpyibhkae.appsync-api.us-east-1.amazonaws.com/graphql"
+  },
+  "environment": {
+    "sensitive": false,
+    "type": "string",
+    "value": "dev"
+  },
+  "frontend_bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "nyc-mayoral-chatbot-frontend-dev"
+  },
+  "frontend_cdn_domain": {
+    "sensitive": false,
+    "type": "string",
+    "value": "d3uh7r9gg0qktn.cloudfront.net"
+  },
+  "frontend_distribution_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "E1UG523OO94VMC"
+  },
+  "project_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "nyc-mayoral-chatbot"
+  }
+}

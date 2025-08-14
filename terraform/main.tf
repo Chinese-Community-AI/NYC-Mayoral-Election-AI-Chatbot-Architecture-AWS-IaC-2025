@@ -28,8 +28,8 @@ module "api" {
   source       = "./modules/api"
   project_name = var.project_name
   environment  = var.environment
-  auth_lambda_invoke_arn   = module.lambda.auth_handler_invoke_arn
-  auth_lambda_function_name = module.lambda.auth_handler_function_name
+  auth_lambda_function_arn   = module.lambda.auth_handler_function_arn
+  auth_lambda_function_name  = module.lambda.auth_handler_function_name
   cors_allowed_origins     = var.cors_allowed_origins
 }
 
