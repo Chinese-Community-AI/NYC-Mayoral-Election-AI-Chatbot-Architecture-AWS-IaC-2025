@@ -4,6 +4,7 @@ const AWS = require("aws-sdk");
 const { v4: uuidv4 } = require("uuid");
 
 const dynamodb = new AWS.DynamoDB.DocumentClient();
+const lambda = new AWS.Lambda();
 const TABLE_NAME = process.env.DYNAMODB_TABLE_NAME;
 
 exports.handler = async (event) => {
@@ -219,6 +220,24 @@ async function sendMessage(conversationId, content, userId) {
     isComplete: false,
   };
   await dynamodb.put({ TableName: TABLE_NAME, Item: assistant }).promise();
+
+  // Invoke streaming handler asynchronously to generate assistant reply
+  try {
+    const payload = {
+      messageId: assistant.id,
+      conversationId,
+      content,
+    };
+    await lambda
+      .invoke({
+        FunctionName: process.env.STREAMING_HANDLER_FUNCTION,
+        InvocationType: "Event",
+        Payload: JSON.stringify(payload),
+      })
+      .promise();
+  } catch (e) {
+    console.warn("Failed to invoke streaming handler", e);
+  }
 
   return {
     userMessage: {
