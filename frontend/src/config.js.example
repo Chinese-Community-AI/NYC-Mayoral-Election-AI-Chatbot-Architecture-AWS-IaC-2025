@@ -1,0 +1,17 @@
+// Replace these values with the outputs from your Terraform deployment
+const config = {
+  appSync: {
+    graphqlEndpoint: "YOUR_APPSYNC_ENDPOINT_URL",
+    apiKey: "YOUR_APPSYNC_API_KEY",
+    region: "us-east-1"
+  },
+  apiUrl: "YOUR_API_GATEWAY_URL",
+  jwt: {
+    expiresIn: 86400,
+    tokenPrefix: "Bearer "
+  }
+};
+
+export default config;
+
+
