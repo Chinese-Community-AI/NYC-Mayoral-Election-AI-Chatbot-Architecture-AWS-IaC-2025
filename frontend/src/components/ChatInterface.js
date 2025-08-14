@@ -6,6 +6,7 @@ import {
   ON_MESSAGE_UPDATE,
   ON_NEW_MESSAGE,
 } from "../graphql/operations";
+import MessageList from "./MessageList";
 
 function ChatInterface({ conversationId }) {
   const [text, setText] = useState("");
@@ -44,17 +45,7 @@ function ChatInterface({ conversationId }) {
 
   return (
     <div className="chat-interface">
-      {loading ? (
-        <div>Loading...</div>
-      ) : (
-        <div className="messages-container">
-          {messages.map((m) => (
-            <div key={m.id} className={`message-bubble ${m.role}`}>
-              {m.content}
-            </div>
-          ))}
-        </div>
-      )}
+      {loading ? <div>Loading...</div> : <MessageList messages={messages} />}
       <form onSubmit={onSend}>
         <input
           placeholder="Type a message"
