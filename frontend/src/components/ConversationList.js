@@ -1,9 +1,17 @@
 import React, { useState } from "react";
 import { useQuery, useMutation } from "@apollo/client";
-import { LIST_CONVERSATIONS, CREATE_CONVERSATION } from "../graphql/operations";
+import {
+  LIST_CONVERSATIONS,
+  LIST_RECENT_CONVERSATIONS,
+  CREATE_CONVERSATION,
+} from "../graphql/operations";
 
 function ConversationList({ onSelect, selectedId }) {
-  const { data, loading, error, refetch } = useQuery(LIST_CONVERSATIONS);
+  const [showRecent, setShowRecent] = useState(true);
+  const { data, loading, error, refetch } = useQuery(
+    showRecent ? LIST_RECENT_CONVERSATIONS : LIST_CONVERSATIONS,
+    { variables: { limit: 20 } }
+  );
   const [createConversation] = useMutation(CREATE_CONVERSATION);
   const [title, setTitle] = useState("");
 
@@ -25,6 +33,16 @@ function ConversationList({ onSelect, selectedId }) {
         />
         <button type="submit">Create</button>
       </form>
+      <div style={{ margin: "8px 0" }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={showRecent}
+            onChange={(e) => setShowRecent(e.target.checked)}
+          />
+          Show recent first
+        </label>
+      </div>
       {(data?.listConversations || []).map((c) => (
         <div
           key={c.id}

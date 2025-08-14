@@ -49,3 +49,15 @@ export const SEND_MESSAGE = gql`
     }
   }
 `;
+
+export const LIST_RECENT_CONVERSATIONS = gql`
+  query ListRecentConversations($limit: Int) {
+    listRecentConversations(limit: $limit) {
+      id
+      userId
+      title
+      createdAt
+      updatedAt
+    }
+  }
+`;
