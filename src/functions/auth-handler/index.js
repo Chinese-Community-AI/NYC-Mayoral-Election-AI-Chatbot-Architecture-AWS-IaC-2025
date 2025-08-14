@@ -4,6 +4,8 @@ const AWS = require("aws-sdk");
 const jwt = require("jsonwebtoken");
 
 const ssm = new AWS.SSM();
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+const USERS_TABLE_NAME = process.env.USERS_TABLE_NAME;
 
 async function getJwtSecret() {
   const arn = process.env.JWT_SECRET_ARN;
@@ -45,6 +47,17 @@ function badRequest(message) {
 exports.handler = async (event) => {
   // Branch: API Gateway proxy (login)
   if (event && (event.httpMethod || event.resource || event.path)) {
+    if (event.httpMethod === "OPTIONS") {
+      return {
+        statusCode: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type,Authorization",
+          "Access-Control-Allow-Methods": "OPTIONS,POST",
+        },
+        body: "",
+      };
+    }
     if (event.httpMethod === "POST") {
       let body;
       try {
@@ -60,6 +73,27 @@ exports.handler = async (event) => {
         algorithm: "HS256",
         expiresIn,
       });
+
+      // Upsert user record in users table
+      if (USERS_TABLE_NAME) {
+        const nowIso = new Date().toISOString();
+        try {
+          await dynamodb
+            .update({
+              TableName: USERS_TABLE_NAME,
+              Key: { username },
+              UpdateExpression:
+                "SET lastLoginAt = :now, roles = if_not_exists(roles, :roles)",
+              ExpressionAttributeValues: {
+                ":now": nowIso,
+                ":roles": roles,
+              },
+            })
+            .promise();
+        } catch (e) {
+          console.warn("Failed to upsert user record", e);
+        }
+      }
       return ok({ token, username, roles, expiresIn });
     }
     return badRequest("Unsupported method");
