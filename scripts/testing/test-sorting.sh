@@ -1,110 +1,113 @@
 #!/bin/bash
-set -euo pipefail
 
-# Load configuration
-source "$(dirname "$0")/../config.sh"
+# Script to test the time-based sorting functionality
+# This script creates multiple conversations, sends messages to them,
+# and verifies that the listRecentConversations query returns them in the correct order
 
-echo "Testing conversation sorting..."
+# Set variables
+API_URL=$(grep -o 'graphqlEndpoint: "[^"]*"' frontend/src/config.js | cut -d'"' -f2)
+API_KEY=$(grep -o 'apiKey: "[^"]*"' frontend/src/config.js | cut -d'"' -f2)
 
-# Login and get token
-echo "Logging in..."
-LOGIN_RESPONSE=$(curl -s -X POST "${API_URL}/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"demo","password":"demo123"}')
-
-TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.token')
-
-if [ "$TOKEN" = "null" ]; then
-  echo "Login failed"
+if [ -z "$API_URL" ] || [ -z "$API_KEY" ]; then
+  echo "Error: Could not find API URL or API Key in frontend/src/config.js"
+  echo "Please run ./apply-changes.sh first to update the configuration"
   exit 1
 fi
 
-echo "Token obtained"
+echo "===== Testing Time-Based Sorting ====="
+echo "API URL: $API_URL"
+echo "API Key: ${API_KEY:0:5}...${API_KEY: -5}"
 
-# Create test conversations
-echo "Creating test conversations..."
+# Function to create a conversation
+create_conversation() {
+  local title=$1
+  echo "Creating conversation: $title"
+  
+  response=$(curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: $API_KEY" \
+    -d "{\"query\": \"mutation CreateConversation { createConversation(title: \\\"$title\\\") { id title createdAt updatedAt } }\"}" \
+    "$API_URL")
+  
+  echo "Response: $response"
+  
+  # Extract conversation ID
+  conversation_id=$(echo "$response" | jq -r '.data.createConversation.id')
+  
+  if [ "$conversation_id" = "null" ] || [ -z "$conversation_id" ]; then
+    echo "Error: Failed to create conversation"
+    echo "Response: $response"
+    exit 1
+  fi
+  
+  echo "Created conversation ID: $conversation_id"
+  echo "$conversation_id"
+}
 
-CONV1_RESPONSE=$(curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "query": "mutation { createConversation(title: \"First Conversation\") { id title } }"
-  }')
+# Function to send a message to a conversation
+send_message() {
+  local conversation_id=$1
+  local message_content=$2
+  echo "Sending message to conversation $conversation_id: $message_content"
+  
+  response=$(curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: $API_KEY" \
+    -d "{\"query\": \"mutation SendMessage { sendMessage(conversationId: \\\"$conversation_id\\\", content: \\\"$message_content\\\") { id content role timestamp } }\"}" \
+    "$API_URL")
+  
+  echo "Message response: $response"
+}
 
-CONV1_ID=$(echo "$CONV1_RESPONSE" | jq -r '.data.createConversation.id')
-echo "Created conversation 1: $CONV1_ID"
+# Function to list recent conversations
+list_recent_conversations() {
+  echo "Listing recent conversations..."
+  
+  response=$(curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: $API_KEY" \
+    -d '{"query": "query ListRecentConversations { listRecentConversations { id title createdAt updatedAt } }"}' \
+    "$API_URL")
+  
+  echo "Recent conversations response: $response"
+  
+  # Parse and display conversation titles with timestamps
+  echo "Parsed conversations (most recent first):"
+  echo "$response" | jq -r '.data.listRecentConversations[] | "\(.title) - Updated: \(.updatedAt)"'
+}
 
+# Main test sequence
+echo "Starting time-based sorting test..."
+
+# Create conversations with delays to ensure different timestamps
+echo "Step 1: Creating first conversation..."
+CONV1_ID=$(create_conversation "First Conversation")
 sleep 2
 
-CONV2_RESPONSE=$(curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "query": "mutation { createConversation(title: \"Second Conversation\") { id title } }"
-  }')
-
-CONV2_ID=$(echo "$CONV2_RESPONSE" | jq -r '.data.createConversation.id')
-echo "Created conversation 2: $CONV2_ID"
-
+echo "Step 2: Creating second conversation..."
+CONV2_ID=$(create_conversation "Second Conversation")
 sleep 2
 
-CONV3_RESPONSE=$(curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "query": "mutation { createConversation(title: \"Third Conversation\") { id title } }"
-  }')
-
-CONV3_ID=$(echo "$CONV3_RESPONSE" | jq -r '.data.createConversation.id')
-echo "Created conversation 3: $CONV3_ID"
-
-# Send messages to update timestamps
-echo "Sending messages to update timestamps..."
-
-# Message to conversation 1 (oldest activity)
-curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{
-    \"query\": \"mutation { sendMessage(conversationId: \\\"$CONV1_ID\\\", content: \\\"Hello from conversation 1\\\") { id } }\"
-  }" > /dev/null
-
+echo "Step 3: Creating third conversation..."
+CONV3_ID=$(create_conversation "Third Conversation")
 sleep 2
 
-# Message to conversation 3 (most recent activity)
-curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{
-    \"query\": \"mutation { sendMessage(conversationId: \\\"$CONV3_ID\\\", content: \\\"Hello from conversation 3\\\") { id } }\"
-  }" > /dev/null
-
+# Send messages to update conversation timestamps in reverse order
+echo "Step 4: Sending message to first conversation (will be oldest after messages)"
+send_message "$CONV1_ID" "Hello from first conversation"
 sleep 2
 
-# Message to conversation 2 (middle activity)
-curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{
-    \"query\": \"mutation { sendMessage(conversationId: \\\"$CONV2_ID\\\", content: \\\"Hello from conversation 2\\\") { id } }\"
-  }" > /dev/null
+echo "Step 5: Sending message to third conversation (will be middle after messages)"
+send_message "$CONV3_ID" "Hello from third conversation"
+sleep 2
 
-echo "Messages sent"
+echo "Step 6: Sending message to second conversation (will be most recent after messages)"
+send_message "$CONV2_ID" "Hello from second conversation"
+sleep 2
 
-# Wait a moment for processing
-sleep 3
+# List conversations to verify sorting
+echo "Step 7: Verifying conversation order..."
+list_recent_conversations
 
-# Test sorting
-echo "Testing conversation sorting (should be: Conv2, Conv3, Conv1)..."
-
-CONVERSATIONS_RESPONSE=$(curl -s -X POST "$GRAPHQL_ENDPOINT" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "query": "query { listRecentConversations { id title updated_at } }"
-  }')
-
-echo "Recent conversations (most recent first):"
-echo "$CONVERSATIONS_RESPONSE" | jq -r '.data.listRecentConversations[] | "\(.title) - \(.updated_at)"'
-
-echo "Sorting test complete!"
+echo "===== Test Complete ====="
+echo "Expected order (most recent first): Second Conversation, Third Conversation, First Conversation"
