@@ -64,21 +64,21 @@ resource "aws_iam_role_policy_attachment" "lambda_users_attach" {
   policy_arn = aws_iam_policy.lambda_users_policy.arn
 }
 
-data "aws_iam_policy_document" "lambda_ssm" {
+data "aws_iam_policy_document" "lambda_secrets_manager" {
   statement {
-    actions   = ["ssm:GetParameter"]
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = [var.jwt_secret_arn]
   }
 }
 
-resource "aws_iam_policy" "lambda_ssm_policy" {
-  name   = "${var.project_name}-lambda-ssm-${var.environment}"
-  policy = data.aws_iam_policy_document.lambda_ssm.json
+resource "aws_iam_policy" "lambda_secrets_manager_policy" {
+  name   = "${var.project_name}-lambda-secrets-manager-${var.environment}"
+  policy = data.aws_iam_policy_document.lambda_secrets_manager.json
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_ssm_attach" {
+resource "aws_iam_role_policy_attachment" "lambda_secrets_manager_attach" {
   role       = aws_iam_role.lambda_execution_role.name
-  policy_arn = aws_iam_policy.lambda_ssm_policy.arn
+  policy_arn = aws_iam_policy.lambda_secrets_manager_policy.arn
 }
 
 
