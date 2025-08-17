@@ -1,18 +1,18 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ApolloProvider, useApolloClient } from "@apollo/client";
-import client from "./graphql/client";
-import ConversationList from "./components/ConversationList";
-import ChatInterface from "./components/ChatInterface";
-import Login from "./components/Login";
-import authService from "./auth/authService";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
 } from "react-router-dom";
+import client from "./graphql/client";
+import ConversationList from "./components/ConversationList";
+import ChatInterface from "./components/ChatInterface";
+import Login from "./components/Login";
 import PrivateRoute from "./auth/PrivateRoute";
-import "./index.css";
+import authService from "./auth/authService";
+import { GET_MESSAGES } from "./graphql/operations";
 import "./App.css";
 
 function Dashboard() {
@@ -20,19 +20,33 @@ function Dashboard() {
   const apolloClient = useApolloClient();
   const previousConversationRef = useRef(null);
 
+  // Handle conversation selection with cache management
   const handleSelectConversation = (conversation) => {
+    // If we're switching conversations, ensure the cache is properly managed
     if (
       previousConversationRef.current &&
       previousConversationRef.current.id !== conversation.id
     ) {
+      console.log(
+        "Switching from conversation",
+        previousConversationRef.current.id,
+        "to",
+        conversation.id
+      );
+
+      // Update the selected conversation
       setSelectedConversation(conversation);
+
+      // Update the ref
       previousConversationRef.current = conversation;
     } else {
+      // First selection or same conversation
       setSelectedConversation(conversation);
       previousConversationRef.current = conversation;
     }
   };
 
+  // Handle logout
   const handleLogout = () => {
     authService.logout();
     window.location.href = "/login";
@@ -80,6 +94,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Navigate to="/conversations" replace />} />
+
+          {/* Protected routes */}
           <Route element={<PrivateRoute />}>
             <Route path="/conversations" element={<Dashboard />} />
             <Route path="/conversations/:id" element={<Dashboard />} />

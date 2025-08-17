@@ -1,8 +1,33 @@
 import { gql } from "@apollo/client";
 
+// Queries
+export const GET_CONVERSATION = gql`
+  query GetConversation($id: ID!) {
+    getConversation(id: $id) {
+      id
+      userId
+      title
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
 export const LIST_CONVERSATIONS = gql`
   query ListConversations {
     listConversations {
+      id
+      userId
+      title
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const LIST_RECENT_CONVERSATIONS = gql`
+  query ListRecentConversations($limit: Int) {
+    listRecentConversations(limit: $limit) {
       id
       userId
       title
@@ -25,6 +50,7 @@ export const GET_MESSAGES = gql`
   }
 `;
 
+// Mutations
 export const CREATE_CONVERSATION = gql`
   mutation CreateConversation($title: String) {
     createConversation(title: $title) {
@@ -50,18 +76,7 @@ export const SEND_MESSAGE = gql`
   }
 `;
 
-export const LIST_RECENT_CONVERSATIONS = gql`
-  query ListRecentConversations($limit: Int) {
-    listRecentConversations(limit: $limit) {
-      id
-      userId
-      title
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
+// Subscriptions
 export const ON_NEW_MESSAGE = gql`
   subscription OnNewMessage($conversationId: ID!) {
     onNewMessage(conversationId: $conversationId) {
