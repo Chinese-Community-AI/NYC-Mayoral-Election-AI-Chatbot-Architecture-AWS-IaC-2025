@@ -17,21 +17,40 @@ import "./ChatInterface.css";
 function ChatInterface({ conversation }) {
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  // Add direct state management for messages
   const [messages, setMessages] = useState([]);
   const messagesEndRef = useRef(null);
   const client = useApolloClient();
 
+  // Store the current conversation ID in a ref to detect changes
   const previousConversationIdRef = useRef(conversation?.id);
 
+  // Clear messages and reset cache when conversation changes
   useEffect(() => {
+    // Check if conversation ID has changed
     if (previousConversationIdRef.current !== conversation.id) {
+      console.log(
+        "Conversation changed from",
+        previousConversationIdRef.current,
+        "to",
+        conversation.id
+      );
+      console.log("Clearing messages state for new conversation");
+
+      // Clear the messages state
       setMessages([]);
+
+      // Reset the Apollo cache for this conversation to prevent duplicates
       try {
+        // Read the current cache for the new conversation
         const currentData = client.cache.readQuery({
           query: GET_MESSAGES,
           variables: { conversationId: conversation.id },
         });
+
         if (currentData) {
+          // Write back only server-generated messages (not temporary ones)
+          // This filters out any temporary messages that might cause duplicates
           const serverMessages = currentData.getMessages.filter(
             (msg) =>
               msg &&
@@ -39,25 +58,49 @@ function ChatInterface({ conversation }) {
               !msg.id.startsWith("temp-user-") &&
               !msg.id.startsWith("placeholder-")
           );
+
+          console.log(
+            "Resetting cache with server messages only:",
+            serverMessages.length
+          );
+
+          // Update the cache with only server messages
           client.cache.writeQuery({
             query: GET_MESSAGES,
             variables: { conversationId: conversation.id },
-            data: { getMessages: serverMessages },
+            data: {
+              getMessages: serverMessages,
+            },
           });
         }
-      } catch {}
+      } catch (error) {
+        console.log("No existing cache for this conversation, starting fresh");
+      }
+
+      // Update the ref with the new conversation ID
       previousConversationIdRef.current = conversation.id;
     }
   }, [conversation.id, client.cache]);
 
+  // Query to fetch messages for the current conversation
   const { loading, error, data, refetch } = useQuery(GET_MESSAGES, {
     variables: { conversationId: conversation.id },
-    fetchPolicy: "cache-and-network",
+    fetchPolicy: "cache-and-network", // Use cache but also fetch from network
   });
 
+  // Mutation to send a new message
   const [sendMessage] = useMutation(SEND_MESSAGE, {
-    onCompleted: () => {
+    onCompleted: (data) => {
+      // We've already cleared the input field and added a temporary user message
+      // Just need to update the sending state
       setIsSending(false);
+
+      // Log the sent message
+      console.log("Message sent successfully:", data.sendMessage);
+
+      // We're keeping the temporary user message, no need to replace it
+
+      // Create a placeholder assistant message with a timestamp
       const now = Date.now();
       const placeholderMessage = {
         id: `placeholder-${now}`,
@@ -66,113 +109,252 @@ function ChatInterface({ conversation }) {
         role: "assistant",
         timestamp: new Date().toISOString(),
         isComplete: false,
-        createdAt: now,
+        createdAt: now, // Add a timestamp to track when this placeholder was created
       };
+
+      // Add the placeholder message to the cache
       try {
         const cache = client.cache;
         const currentData = cache.readQuery({
           query: GET_MESSAGES,
           variables: { conversationId: conversation.id },
         });
+
         const getMessages = currentData?.getMessages || [];
+
+        // Check if a placeholder already exists
         const placeholderExists = getMessages.some(
           (msg) =>
             msg.role === "assistant" && msg.content === "..." && !msg.isComplete
         );
+
         if (!placeholderExists) {
+          console.log(
+            "Adding placeholder assistant message to cache:",
+            placeholderMessage
+          );
           const updatedMessages = [...getMessages, placeholderMessage];
+
+          // Update the cache
           cache.writeQuery({
             query: GET_MESSAGES,
             variables: { conversationId: conversation.id },
-            data: { getMessages: updatedMessages },
+            data: {
+              getMessages: updatedMessages,
+            },
           });
-          setMessages((prev) => {
-            const map = new Map();
-            prev.forEach((m) => map.set(m.id, m));
-            map.set(placeholderMessage.id, placeholderMessage);
-            return Array.from(map.values()).sort(
+
+          // Update our local state directly, preserving existing messages
+          console.log("Updating local state with placeholder message");
+          setMessages((prevMessages) => {
+            // Create a map of message IDs to messages for easy lookup
+            const messageMap = new Map();
+
+            // First add all existing messages to the map
+            prevMessages.forEach((msg) => {
+              messageMap.set(msg.id, msg);
+            });
+
+            // Then add the placeholder message
+            messageMap.set(placeholderMessage.id, placeholderMessage);
+
+            // Convert back to array and sort by timestamp
+            const mergedMessages = Array.from(messageMap.values()).sort(
               (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
             );
+
+            console.log("Merged messages with placeholder:", mergedMessages);
+            return mergedMessages;
           });
         }
-      } catch {}
+      } catch (error) {
+        console.error("Error adding placeholder message to cache:", error);
+      }
     },
     onError: (error) => {
       console.error("Error sending message:", error);
       alert("Failed to send message. Please try again.");
       setIsSending(false);
     },
+    update: (cache, { data }) => {
+      if (data?.sendMessage) {
+        try {
+          // Read the current messages from the cache
+          const currentData = cache.readQuery({
+            query: GET_MESSAGES,
+            variables: { conversationId: conversation.id },
+          });
+
+          const getMessages = currentData?.getMessages || [];
+
+          // We don't need to update the cache with the user message
+          // since we've already added it to the state in handleSendMessage
+          // This update callback is mainly for the server to acknowledge the message
+
+          // Log the server response for debugging
+          const messages = Array.isArray(data.sendMessage)
+            ? data.sendMessage
+            : [data.sendMessage];
+          console.log("Server acknowledged messages:", messages);
+
+          // We're keeping our temporary user messages, no need to update the cache
+        } catch (error) {
+          console.error("Error in update callback:", error);
+        }
+      }
+    },
   });
 
-  useSubscription(ON_NEW_MESSAGE, {
+  // Subscription for real-time messages with direct cache update
+  const { data: subscriptionData } = useSubscription(ON_NEW_MESSAGE, {
     variables: { conversationId: conversation.id },
     onSubscriptionData: ({ subscriptionData, client }) => {
+      // When we receive a new message via subscription
       const newMessage = subscriptionData.data.onNewMessage;
+      console.log("Subscription received new message:", newMessage);
+
+      // Only process assistant messages (we already have the user message)
       if (newMessage.role === "assistant") {
         try {
+          // Get the current messages from the cache
           const currentData = client.readQuery({
             query: GET_MESSAGES,
             variables: { conversationId: conversation.id },
           });
+
           const getMessages = currentData?.getMessages || [];
+
+          // Check if the message already exists in the cache
           const messageExists = getMessages.some(
             (msg) => msg.id === newMessage.id
           );
+
+          // If it's a new message, update the cache
           if (!messageExists) {
+            console.log("Adding new assistant message to cache:", newMessage);
             const updatedMessages = [...getMessages, newMessage];
+
+            // Update the cache
             client.writeQuery({
               query: GET_MESSAGES,
               variables: { conversationId: conversation.id },
-              data: { getMessages: updatedMessages },
+              data: {
+                getMessages: updatedMessages,
+              },
             });
-            setMessages((prev) => {
-              const map = new Map();
-              prev.forEach((m) => map.set(m.id, m));
-              map.set(newMessage.id, newMessage);
-              return Array.from(map.values()).sort(
+
+            // Update our local state directly, preserving existing messages
+            console.log("Updating local state with new assistant message");
+            setMessages((prevMessages) => {
+              // Create a map of message IDs to messages for easy lookup
+              const messageMap = new Map();
+
+              // First add all existing messages to the map
+              prevMessages.forEach((msg) => {
+                messageMap.set(msg.id, msg);
+              });
+
+              // Then add the new message
+              messageMap.set(newMessage.id, newMessage);
+
+              // Convert back to array and sort by timestamp
+              const mergedMessages = Array.from(messageMap.values()).sort(
                 (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
               );
+
+              console.log(
+                "Merged messages with new assistant message:",
+                mergedMessages
+              );
+
+              // Force scroll to bottom when a new message is added
+              setTimeout(forceScrollToBottom, 50);
+
+              return mergedMessages;
             });
           }
-        } catch {
+        } catch (error) {
+          console.error("Error updating cache with subscription data:", error);
+          // Fallback to refetch if cache update fails
           refetch();
         }
       }
     },
   });
 
-  useSubscription(ON_MESSAGE_UPDATE, {
+  // Subscription for streaming message updates
+  const { data: messageUpdateData } = useSubscription(ON_MESSAGE_UPDATE, {
     variables: { conversationId: conversation.id },
     onSubscriptionData: ({ subscriptionData, client }) => {
+      // When we receive a message update via subscription
       const update = subscriptionData.data.onMessageUpdate;
+      console.log("Subscription received message update:", update, {
+        timestamp: new Date().toISOString(),
+        contentLength: update.content ? update.content.length : 0,
+        isComplete: update.isComplete,
+      });
+
       try {
+        // Get the current messages from the cache
         const currentData = client.readQuery({
           query: GET_MESSAGES,
           variables: { conversationId: conversation.id },
         });
+
         const getMessages = currentData?.getMessages || [];
+        console.log("Current messages in cache:", getMessages, {
+          count: getMessages.length,
+          containerScrollHeight: document.querySelector(".messages-container")
+            ?.scrollHeight,
+          containerScrollTop: document.querySelector(".messages-container")
+            ?.scrollTop,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Debug message IDs
+        console.log("Looking for message with ID:", update.messageId);
+        console.log(
+          "Message IDs in cache:",
+          getMessages.map((msg) => msg.id)
+        );
+
+        // Try to find the message by ID first
         let messageIndex = getMessages.findIndex(
           (msg) => msg.id === update.messageId
         );
         let foundMessage = null;
+
+        // If not found by ID, try to find the most recent assistant message or placeholder
         if (messageIndex < 0) {
+          // First, look for recent placeholder messages (they start with "placeholder-")
+          // Only consider placeholders created in the last 10 seconds
           const now = Date.now();
           const recentPlaceholderIndex = getMessages.findIndex(
             (msg) =>
               msg.role === "assistant" &&
               msg.id.startsWith("placeholder-") &&
               (msg.content === "..." || !msg.isComplete) &&
+              // Only update placeholders created in the last 10 seconds
               msg.createdAt &&
               now - msg.createdAt < 10000
           );
+
           if (recentPlaceholderIndex >= 0) {
             messageIndex = recentPlaceholderIndex;
             foundMessage = "recent-placeholder";
           } else {
+            // If no recent placeholder, check if this is a new message that needs its own bubble
+            // If the message ID doesn't match any existing message and there's no recent placeholder,
+            // we should create a new message instead of updating an existing one
             const messageExists = getMessages.some(
               (msg) => msg.id === update.messageId
             );
+
             if (!messageExists && update.content && update.content !== "...") {
+              // This is a new message that needs its own bubble
+              console.log("Creating new message bubble for:", update);
+
+              // Create a new message object
               const newMessage = {
                 id: update.messageId,
                 conversationId: conversation.id,
@@ -182,23 +364,51 @@ function ChatInterface({ conversation }) {
                 isComplete: update.isComplete,
                 __typename: "Message",
               };
+
+              // Add the new message to the cache
               const updatedMessages = [...getMessages, newMessage];
+
+              // Update the cache
               client.writeQuery({
                 query: GET_MESSAGES,
                 variables: { conversationId: conversation.id },
-                data: { getMessages: updatedMessages },
+                data: {
+                  getMessages: updatedMessages,
+                },
               });
-              setMessages((prev) => {
-                const map = new Map();
-                prev.forEach((m) => map.set(m.id, m));
-                map.set(newMessage.id, newMessage);
-                return Array.from(map.values()).sort(
+
+              // Update our local state directly, preserving existing messages
+              console.log("Adding new message to local state:", newMessage);
+              setMessages((prevMessages) => {
+                // Create a map of message IDs to messages for easy lookup
+                const messageMap = new Map();
+
+                // First add all existing messages to the map
+                prevMessages.forEach((msg) => {
+                  messageMap.set(msg.id, msg);
+                });
+
+                // Then add the new message
+                messageMap.set(newMessage.id, newMessage);
+
+                // Convert back to array and sort by timestamp
+                const mergedMessages = Array.from(messageMap.values()).sort(
                   (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
                 );
+
+                console.log(
+                  "Merged messages with new message bubble:",
+                  mergedMessages
+                );
+                return mergedMessages;
               });
+
+              // Skip the rest of the update logic
               return;
             }
           }
+
+          // If no recent placeholder or new message, try to find by content
           const contentIndex = getMessages.findIndex(
             (msg) =>
               msg.role === "assistant" &&
@@ -206,14 +416,17 @@ function ChatInterface({ conversation }) {
                 (update.content &&
                   msg.content.startsWith(update.content.substring(0, 10))))
           );
+
           if (contentIndex >= 0) {
             messageIndex = contentIndex;
             foundMessage = "by-content";
           } else {
+            // Last resort: get the most recent assistant message
             const assistantMessages = getMessages.filter(
               (msg) => msg.role === "assistant"
             );
             if (assistantMessages.length > 0) {
+              // Find the index in the original array
               const lastAssistantMsg =
                 assistantMessages[assistantMessages.length - 1];
               messageIndex = getMessages.findIndex(
@@ -226,22 +439,68 @@ function ChatInterface({ conversation }) {
           foundMessage = "by-id";
         }
 
+        console.log(
+          `Found message ${
+            foundMessage ? "using " + foundMessage : "not found"
+          }, index:`,
+          messageIndex
+        );
+
         if (messageIndex >= 0) {
+          // Create a new array with the updated message
           const updatedMessages = [...getMessages];
+
+          // If we found a placeholder, update its ID to match the real message ID
+          // This will help future updates find it by ID
+          if (
+            foundMessage === "placeholder" ||
+            foundMessage === "recent-placeholder"
+          ) {
+            console.log(
+              `Updating placeholder ID ${updatedMessages[messageIndex].id} to real message ID ${update.messageId}`
+            );
+          }
+
+          // Create a completely new object to ensure React detects the change
           const originalMessage = updatedMessages[messageIndex];
+
+          // Create a completely new message object
           const updatedMessage = {
             ...originalMessage,
-            id: update.messageId,
+            id: update.messageId, // Update the ID to match the real message ID
             content: update.content,
             isComplete: update.isComplete,
-            __typename: originalMessage.__typename || "Message",
-            _lastUpdated: Date.now(),
+            __typename: originalMessage.__typename || "Message", // Preserve __typename for Apollo cache
+            _lastUpdated: Date.now(), // Add a timestamp to force React to detect the change
           };
+
+          console.log("UPDATED MESSAGE OBJECT:", updatedMessage, {
+            contentLength: updatedMessage.content
+              ? updatedMessage.content.length
+              : 0,
+            contentPreview: updatedMessage.content
+              ? updatedMessage.content.substring(0, 50) + "..."
+              : "",
+            timestamp: new Date().toISOString(),
+          });
+
+          // Create a completely new array with the updated message
           let newMessages = [...getMessages];
           newMessages[messageIndex] = updatedMessage;
+
+          // Remove any duplicate messages and placeholders when we have a complete message
           const uniqueMessages = newMessages.filter((msg, idx, self) => {
-            if (!msg || !msg.id) return false;
+            // Skip undefined messages or messages without IDs
+            if (!msg || !msg.id) {
+              console.log(
+                "Skipping undefined message or message without ID in uniqueMessages filter"
+              );
+              return false;
+            }
+
+            // If this is a placeholder and we have a complete message with the same content or from the same update, remove it
             if (msg.id.startsWith("placeholder-")) {
+              // Check if we have a complete message that should replace this placeholder
               const hasCompleteMessage = self.some(
                 (m) =>
                   m &&
@@ -254,61 +513,192 @@ function ChatInterface({ conversation }) {
                       msg.content &&
                       m.content.includes(msg.content.replace("...", ""))))
               );
-              if (hasCompleteMessage) return false;
+
+              if (hasCompleteMessage) {
+                console.log(
+                  "Removing placeholder message as we have a complete message:",
+                  msg.id
+                );
+                return false; // Remove this placeholder
+              }
             }
+
+            // Keep unique messages based on ID
             return idx === self.findIndex((m) => m && m.id && m.id === msg.id);
           });
+
+          console.log("Updating message in cache with ID:", updatedMessage.id);
+          console.log(
+            "Total messages in updated cache:",
+            uniqueMessages.length
+          );
+
+          // Update the cache with the unique messages
           client.writeQuery({
             query: GET_MESSAGES,
             variables: { conversationId: conversation.id },
-            data: { getMessages: uniqueMessages },
+            data: {
+              getMessages: uniqueMessages,
+            },
           });
-          setMessages((prev) => {
-            const map = new Map();
-            prev.forEach((m) => {
+
+          // IMPORTANT: Update our local state directly with the updated messages
+          // This ensures the UI will update regardless of cache issues
+          // But we need to be careful to preserve all existing messages
+
+          // Get the current state directly to ensure we have the latest
+          setMessages((prevMessages) => {
+            console.log("Previous messages in state:", prevMessages);
+
+            // Create a map of message IDs to messages for easy lookup
+            const messageMap = new Map();
+
+            // First add all existing messages to the map
+            prevMessages.forEach((msg) => {
+              // Skip placeholders that are being replaced
               if (
-                m.id.startsWith("placeholder-") &&
+                msg.id.startsWith("placeholder-") &&
                 uniqueMessages.some(
-                  (x) => x.role === "assistant" && x.isComplete
+                  (m) => m.role === "assistant" && m.isComplete
                 )
-              )
+              ) {
+                console.log("Skipping placeholder in state merge:", msg.id);
                 return;
-              map.set(m.id, m);
+              }
+              messageMap.set(msg.id, msg);
             });
-            uniqueMessages.forEach((m) => map.set(m.id, m));
-            return Array.from(map.values()).sort(
+
+            // Then add or update with messages from the update
+            uniqueMessages.forEach((msg) => {
+              messageMap.set(msg.id, msg);
+            });
+
+            // Convert back to array and sort by timestamp
+            const mergedMessages = Array.from(messageMap.values()).sort(
               (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
             );
+
+            console.log("Merged messages:", mergedMessages, {
+              count: mergedMessages.length,
+              lastMessage:
+                mergedMessages.length > 0
+                  ? {
+                      id: mergedMessages[mergedMessages.length - 1].id,
+                      role: mergedMessages[mergedMessages.length - 1].role,
+                      contentLength: mergedMessages[mergedMessages.length - 1]
+                        .content
+                        ? mergedMessages[mergedMessages.length - 1].content
+                            .length
+                        : 0,
+                    }
+                  : null,
+              timestamp: new Date().toISOString(),
+            });
+
+            // Force scroll to bottom after message update
+            setTimeout(() => {
+              console.log("Forcing scroll after message update");
+              forceScrollToBottom();
+            }, 50);
+            return mergedMessages;
           });
+
+          // Force a re-render by updating the forceUpdate state
+          setForceUpdate((prev) => prev + 1);
+
+          // Force a re-render by updating a state variable
+          // This is a workaround for cases where Apollo cache updates don't trigger re-renders
           setIsSending(false);
         } else {
+          // Message not found in cache, refetch
+          console.warn("Message not found in cache, refetching...");
           refetch();
         }
-      } catch {
+      } catch (error) {
+        console.error("Error updating message in cache:", error);
+        // Fallback to refetch if cache update fails
         refetch();
       }
     },
   });
 
+  // Track if we should auto-scroll (user hasn't manually scrolled up)
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+
+  // Function to check if user has manually scrolled up
   const checkShouldAutoScroll = () => {
     const container = document.querySelector(".messages-container");
     if (container) {
+      // If we're within 30px of the bottom, we should auto-scroll
       const isNearBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight <
         30;
-      return isNearBottom;
+      setShouldAutoScroll(isNearBottom);
+
+      console.log("Scroll position check:", {
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+        clientHeight: container.clientHeight,
+        distanceFromBottom:
+          container.scrollHeight - container.scrollTop - container.clientHeight,
+        shouldAutoScroll: isNearBottom,
+        timestamp: new Date().toISOString(),
+      });
     }
-    return true;
   };
 
+  // Scroll to bottom when messages change
   useEffect(() => {
-    setTimeout(() => messagesEndRef.current?.scrollToBottom?.(), 50);
-  }, [data, messages]);
+    // Use direct DOM manipulation with a small delay to ensure DOM has updated
+    setTimeout(forceScrollToBottom, 50);
+  }, [data, subscriptionData, messageUpdateData, messages]);
 
+  // Force re-render when messages change
+  const [forceUpdate, setForceUpdate] = useState(0);
+  useEffect(() => {
+    // This will force a re-render of the component
+    const timer = setTimeout(() => {
+      setForceUpdate((prev) => prev + 1);
+
+      // Add an additional scroll check after the re-render
+      console.log("Force update triggered, checking scroll position");
+      const container = document.querySelector(".messages-container");
+      if (container) {
+        console.log("Container scroll metrics:", {
+          scrollHeight: container.scrollHeight,
+          clientHeight: container.clientHeight,
+          scrollTop: container.scrollTop,
+          bottomPosition:
+            container.scrollHeight -
+            container.clientHeight -
+            container.scrollTop,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Try to scroll again after the update using direct DOM manipulation
+      console.log("Attempting scroll after force update");
+      forceScrollToBottom();
+    }, 100); // Small delay to ensure cache is updated
+
+    return () => clearTimeout(timer);
+  }, [messageUpdateData]);
+
+  // Use the MessageList's scrollToBottom method
+  const forceScrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollToBottom();
+    }
+  };
+
+  // Handle form submission to send a new message
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!messageInput.trim() || isSending) return;
+
     setIsSending(true);
+
+    // Create a temporary user message to display immediately
     const tempUserMessage = {
       id: `temp-user-${Date.now()}`,
       conversationId: conversation.id,
@@ -317,16 +707,39 @@ function ChatInterface({ conversation }) {
       timestamp: new Date().toISOString(),
       isComplete: true,
     };
-    setMessages((prev) => {
-      const map = new Map();
-      prev.forEach((m) => map.set(m.id, m));
-      map.set(tempUserMessage.id, tempUserMessage);
-      return Array.from(map.values()).sort(
+
+    // Add the user message to the state immediately
+    console.log(
+      "Adding temporary user message to local state:",
+      tempUserMessage
+    );
+    setMessages((prevMessages) => {
+      // Create a map of message IDs to messages for easy lookup
+      const messageMap = new Map();
+
+      // First add all existing messages to the map
+      prevMessages.forEach((msg) => {
+        messageMap.set(msg.id, msg);
+      });
+
+      // Then add the new user message
+      messageMap.set(tempUserMessage.id, tempUserMessage);
+
+      // Convert back to array and sort by timestamp
+      const mergedMessages = Array.from(messageMap.values()).sort(
         (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
       );
+
+      return mergedMessages;
     });
+
+    // Store the message input before clearing it
     const sentMessageContent = messageInput;
+
+    // Clear the input field immediately for better UX
     setMessageInput("");
+
+    // Then send the message to the server
     sendMessage({
       variables: {
         conversationId: conversation.id,
@@ -335,15 +748,51 @@ function ChatInterface({ conversation }) {
     });
   };
 
+  // Update messages state when data changes - improved to handle duplicates
   useEffect(() => {
     if (data?.getMessages) {
+      // Filter out any undefined messages or messages without IDs
       const validMessages = data.getMessages.filter((msg) => msg && msg.id);
+
+      // Log any invalid messages that were filtered out
+      if (validMessages.length < data.getMessages.length) {
+        console.warn(
+          "Filtered out invalid messages:",
+          data.getMessages.length - validMessages.length,
+          "messages were undefined or missing IDs"
+        );
+      }
+
+      // Enhanced logging to debug message display issues
+      console.log("Received messages from query:", {
+        count: validMessages.length,
+        messages: validMessages.map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          contentPreview: msg.content
+            ? msg.content.length > 20
+              ? msg.content.substring(0, 20) + "..."
+              : msg.content
+            : null,
+          timestamp: msg.timestamp,
+          isComplete: msg.isComplete,
+        })),
+      });
+
+      // Merge with existing messages instead of replacing, with improved deduplication
       setMessages((prevMessages) => {
+        // Filter out any undefined messages from previous messages
         const validPrevMessages = prevMessages.filter((msg) => msg && msg.id);
+
+        // Create a map of message IDs to messages for easy lookup
         const messageMap = new Map();
+
+        // Create a map of temporary user messages by content and approximate time
+        // This will help us match temporary messages with their server counterparts
         const tempUserMessageMap = new Map();
         validPrevMessages.forEach((msg) => {
           if (msg.id.startsWith("temp-user-")) {
+            // Create a key based on content and approximate time (within 5 seconds)
             const timeKey = Math.floor(
               new Date(msg.timestamp).getTime() / 5000
             );
@@ -351,14 +800,24 @@ function ChatInterface({ conversation }) {
             tempUserMessageMap.set(`${contentKey}-${timeKey}`, msg.id);
           }
         });
+
+        // First add all existing messages to the map, except temporary ones that have server counterparts
         prevMessages.forEach((msg) => {
-          if (!msg || !msg.id) return;
+          // Skip undefined messages or messages without IDs
+          if (!msg || !msg.id) {
+            console.log("Skipping undefined message or message without ID");
+            return;
+          }
+
+          // For temporary user messages, check if we have a server version
           if (msg.id.startsWith("temp-user-")) {
             const timeKey = Math.floor(
               new Date(msg.timestamp).getTime() / 5000
             );
             const contentKey = msg.content ? msg.content.trim() : "";
             const mapKey = `${contentKey}-${timeKey}`;
+
+            // Check if this temporary message has a server counterpart
             const hasServerVersion = data.getMessages.some(
               (serverMsg) =>
                 serverMsg &&
@@ -370,50 +829,240 @@ function ChatInterface({ conversation }) {
                     new Date(msg.timestamp).getTime()
                 ) < 10000
             );
+
+            // If there's no server version yet, keep the temporary message
             if (!hasServerVersion) {
               messageMap.set(msg.id, msg);
+            } else {
+              console.log(
+                "Skipping temporary message that has a server counterpart:",
+                msg.id
+              );
             }
           } else if (!msg.id.startsWith("placeholder-")) {
+            // Keep all non-temporary, non-placeholder messages
             messageMap.set(msg.id, msg);
           }
         });
+
+        // Then add messages from the query, replacing any temporary versions
         validMessages.forEach((msg) => {
+          // Always add server messages
           messageMap.set(msg.id, msg);
+
+          // If this is a user message, remove any temporary version with the same content
           if (msg && msg.role === "user" && msg.content) {
             const timeKey = Math.floor(
               new Date(msg.timestamp).getTime() / 5000
             );
             const contentKey = msg.content.trim();
             const mapKey = `${contentKey}-${timeKey}`;
+
+            // If we have a temporary version of this message, remove it
             if (tempUserMessageMap.has(mapKey)) {
               const tempId = tempUserMessageMap.get(mapKey);
               if (messageMap.has(tempId)) {
+                console.log(
+                  "Removing temporary message replaced by server version:",
+                  tempId
+                );
                 messageMap.delete(tempId);
               }
             }
           }
         });
-        return Array.from(messageMap.values()).sort(
+
+        // Convert back to array and sort by timestamp
+        const mergedMessages = Array.from(messageMap.values()).sort(
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
+
+        console.log("Merged messages after query update:", {
+          count: mergedMessages.length,
+          byRole: {
+            user: mergedMessages.filter((msg) => msg.role === "user").length,
+            assistant: mergedMessages.filter((msg) => msg.role === "assistant")
+              .length,
+          },
+          temporaryRemaining: mergedMessages.filter((msg) =>
+            msg.id.startsWith("temp-user-")
+          ).length,
+          placeholders: mergedMessages.filter((msg) =>
+            msg.id.startsWith("placeholder-")
+          ).length,
+        });
+
+        return mergedMessages;
       });
     }
   }, [data]);
+
+  // Debug effect to monitor message content changes and log all messages
+  useEffect(() => {
+    if (messages.length > 0) {
+      const assistantMessages = messages.filter(
+        (msg) => msg.role === "assistant"
+      );
+      if (assistantMessages.length > 0) {
+        const lastAssistantMsg =
+          assistantMessages[assistantMessages.length - 1];
+        console.log("Last assistant message content changed:", {
+          id: lastAssistantMsg.id,
+          contentLength: lastAssistantMsg.content
+            ? lastAssistantMsg.content.length
+            : 0,
+          isComplete: lastAssistantMsg.isComplete,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Log all messages for debugging
+      console.log("Current messages in state:", {
+        count: messages.length,
+        byRole: {
+          user: messages.filter((msg) => msg.role === "user").length,
+          assistant: messages.filter((msg) => msg.role === "assistant").length,
+        },
+        messages: messages.map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          contentPreview: msg.content
+            ? msg.content.length > 20
+              ? msg.content.substring(0, 20) + "..."
+              : msg.content
+            : null,
+          timestamp: msg.timestamp,
+          isComplete: msg.isComplete,
+        })),
+      });
+    }
+  }, [
+    messages
+      .map((msg) => (msg.role === "assistant" ? msg.content : null))
+      .join("|"),
+  ]);
+
+  // Add scroll event listener to detect manual scrolling
+  useEffect(() => {
+    const container = document.querySelector(".messages-container");
+    if (container) {
+      console.log("Adding scroll event listener to messages container");
+      container.addEventListener("scroll", checkShouldAutoScroll);
+
+      // Set initial auto-scroll state
+      checkShouldAutoScroll();
+
+      // Clean up the event listener when the component unmounts
+      return () => {
+        console.log("Removing scroll event listener from messages container");
+        container.removeEventListener("scroll", checkShouldAutoScroll);
+      };
+    }
+  }, []);
+
+  // Improved cleanup effect to remove only empty placeholder messages
+  useEffect(() => {
+    // Only run this cleanup if we have messages
+    if (messages.length === 0) return;
+
+    // Check if we have any empty placeholder messages
+    const emptyPlaceholders = messages.filter(
+      (msg) =>
+        msg.id.startsWith("placeholder-") &&
+        msg.content === "..." &&
+        msg.role === "assistant"
+    );
+
+    // Check if we have any complete assistant messages that were created after the placeholders
+    if (emptyPlaceholders.length > 0) {
+      const completeMessages = messages.filter(
+        (msg) =>
+          msg.role === "assistant" &&
+          !msg.id.startsWith("placeholder-") &&
+          msg.isComplete === true
+      );
+
+      // Only remove placeholders if we have complete messages that came after them
+      if (completeMessages.length > 0) {
+        console.log(
+          "Found complete messages that can replace placeholders:",
+          completeMessages.length,
+          "complete messages,",
+          emptyPlaceholders.length,
+          "placeholders"
+        );
+
+        // For each placeholder, check if there's a newer complete message
+        const placeholdersToRemove = emptyPlaceholders.filter((placeholder) => {
+          const placeholderTime = new Date(placeholder.timestamp).getTime();
+
+          // Check if there's a complete message that was created after this placeholder
+          return completeMessages.some((complete) => {
+            const completeTime = new Date(complete.timestamp).getTime();
+            return completeTime > placeholderTime;
+          });
+        });
+
+        if (placeholdersToRemove.length > 0) {
+          console.log(
+            "Removing",
+            placeholdersToRemove.length,
+            "placeholder messages that have been replaced"
+          );
+
+          // Create a new array without the placeholders to remove
+          const cleanedMessages = messages.filter(
+            (msg) =>
+              !placeholdersToRemove.some(
+                (placeholder) => placeholder.id === msg.id
+              )
+          );
+
+          // Update our state with the cleaned messages
+          if (cleanedMessages.length !== messages.length) {
+            console.log(
+              "Removed placeholder messages:",
+              messages.length - cleanedMessages.length
+            );
+            setMessages(cleanedMessages);
+
+            // Also update the cache
+            try {
+              client.writeQuery({
+                query: GET_MESSAGES,
+                variables: { conversationId: conversation.id },
+                data: {
+                  getMessages: cleanedMessages,
+                },
+              });
+            } catch (error) {
+              console.error(
+                "Error updating cache with cleaned messages:",
+                error
+              );
+            }
+          }
+        }
+      }
+    }
+  }, [messages, conversation.id, client]);
 
   if (loading) return <div className="loading">Loading messages...</div>;
   if (error)
     return <div className="error">Error loading messages: {error.message}</div>;
 
   return (
-    <div className="chat-interface" key={`chat-${conversation.id}`}>
+    <div className="chat-interface" key={`chat-${forceUpdate}`}>
       <div className="chat-header">
         <h2>{conversation.title || "Untitled Conversation"}</h2>
       </div>
+      {/* Replace the messages container with our new MessageList component */}
       <MessageList
         messages={messages}
-        onScroll={() => {}}
+        onScroll={(isNearBottom) => setShouldAutoScroll(isNearBottom)}
         ref={messagesEndRef}
       />
+
       <form className="message-input-form" onSubmit={handleSendMessage}>
         <input
           type="text"
