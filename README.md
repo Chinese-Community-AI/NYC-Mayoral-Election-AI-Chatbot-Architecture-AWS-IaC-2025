@@ -11,6 +11,10 @@ The is a MVP for 2025 Mayoral Election AI Chatbot. This is Approach 1:
 
 Architecture Diagram
 <img width="989" height="835" alt="Screenshot 2025-08-14 at 4 10 22 PM" src="https://github.com/user-attachments/assets/90b2db63-8928-4a17-82e9-5f965e24af7e" />
+## Cost Management
+Expected less than a dollar for deploying the Internal tesing with login:
+<img width="963" height="315" alt="Screenshot 2025-08-19 at 6 15 56 AM" src="https://github.com/user-attachments/assets/83e8c8f6-5dff-4d74-b67f-f65e8cea3b76" />
+
 
 ## Prerequisites
 
